@@ -1,129 +1,59 @@
-"""Cloud Function for automated backup operations"""
-import functions_framework
-from flask import jsonify
-import datetime
+from flask import Flask, request, jsonify
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
 
-# Add parent directory to path to import utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from gcs import list_files, upload_file
+import json
+from datetime import datetime
 
-from utils.gcs import copy_file, list_files
-from utils.logger import log_info, log_error, log_request, log_response
+app = Flask(__name__)
 
-@functions_framework.http
-def backup_handler(request):
-    """
-    HTTP Cloud Function to create backups
-    Triggered via HTTP request or Cloud Scheduler
-    
-    Args:
-        request (flask.Request): The request object.
-        
-    Returns:
-        flask.Response: JSON response with backup details
-    """
+@app.route("/", methods=["POST"])
+def backup_handler():
+    """Handle backup creation requests"""
     try:
-        log_request(request)
+        data = request.get_json()
         
-        # Get request parameters
-        request_json = request.get_json(silent=True)
-        source_file = request_json.get('source_file') if request_json else None
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+            
+        user_path = data.get("user_path")
+        backup_name = data.get("backup_name", f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         
-        if not source_file:
-            # For demo/scheduled backups, backup all user data files
-            source_file = "user-data/important.docx"
+        if not user_path:
+            return jsonify({"error": "user_path is required"}), 400
         
-        # Create timestamp for backup version
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # List all files for the user
+        user_files = list_files(user_path)
         
-        # Generate destination path
-        filename = source_file.split('/')[-1]
-        filename_parts = filename.rsplit('.', 1)
-        if len(filename_parts) == 2:
-            base_name, extension = filename_parts
-            dest_file = f"backups/{base_name}_{timestamp}.{extension}"
-        else:
-            dest_file = f"backups/{filename}_{timestamp}"
+        if not user_files:
+            return jsonify({"error": "No files found for backup"}), 404
         
-        # Copy file to backup location
-        copy_file(source_file, dest_file)
-        
-        log_info(
-            f"Backup created successfully",
-            source=source_file,
-            destination=dest_file,
-            timestamp=timestamp
-        )
-        
-        response_data = {
-            "status": "success",
-            "message": f"Backed up {source_file} to {dest_file}",
-            "backup": {
-                "source": source_file,
-                "destination": dest_file,
-                "timestamp": timestamp,
-                "version": timestamp
-            }
+        # Create backup manifest
+        backup_manifest = {
+            "backup_name": backup_name,
+            "user_path": user_path,
+            "created_at": datetime.now().isoformat(),
+            "files": user_files,
+            "file_count": len(user_files)
         }
         
-        log_response(200, "Backup successful")
-        return jsonify(response_data), 200
-        
-    except Exception as e:
-        log_error(f"Backup failed: {str(e)}", error=str(e))
-        log_response(500, f"Backup failed: {str(e)}")
-        
-        return jsonify({
-            "status": "error",
-            "message": f"Backup failed: {str(e)}"
-        }), 500
-
-@functions_framework.http
-def list_backups(request):
-    """
-    HTTP Cloud Function to list all backups
-    
-    Args:
-        request (flask.Request): The request object.
-        
-    Returns:
-        flask.Response: JSON response with list of backups
-    """
-    try:
-        log_request(request)
-        
-        # List all files in backups folder
-        backup_files = list_files(prefix='backups/')
-        
-        # Parse backup information
-        backups = []
-        for file_path in backup_files:
-            filename = file_path.split('/')[-1]
-            # Extract timestamp from filename
-            parts = filename.rsplit('_', 1)
-            if len(parts) == 2:
-                timestamp_part = parts[1].rsplit('.', 1)[0]
-                backups.append({
-                    'path': file_path,
-                    'filename': filename,
-                    'version': timestamp_part
-                })
-        
-        log_info(f"Listed {len(backups)} backups")
-        log_response(200, f"Found {len(backups)} backups")
+        # Save backup manifest
+        manifest_content = json.dumps(backup_manifest, indent=2).encode('utf-8')
+        backup_path = f"{user_path}/backups"
+        manifest_url = upload_file(f"{backup_name}_manifest.json", manifest_content, backup_path)
         
         return jsonify({
             "status": "success",
-            "count": len(backups),
-            "backups": backups
-        }), 200
+            "backup_name": backup_name,
+            "manifest_url": manifest_url,
+            "files_backed_up": len(user_files),
+            "message": f"Backup {backup_name} created successfully"
+        })
         
     except Exception as e:
-        log_error(f"Failed to list backups: {str(e)}", error=str(e))
-        log_response(500, f"Failed to list backups: {str(e)}")
-        
-        return jsonify({
-            "status": "error",
-            "message": f"Failed to list backups: {str(e)}"
-        }), 500
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)

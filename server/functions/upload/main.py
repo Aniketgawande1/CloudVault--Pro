@@ -1,13 +1,56 @@
-"""Cloud Function for file upload operations"""
-import functions_framework
-from flask import jsonify
+from flask import Flask, request, jsonify
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
 
-# Add parent directory to path to import utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from gcs import upload_file
 
-from utils.auth import is_authenticated, get_user_id
+app = Flask(__name__)
+
+@app.route("/", methods=["POST"])
+def upload_handler():
+    """Handle file upload requests"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+            
+        filename = data.get("filename")
+        content = data.get("content")
+        user_path = data.get("user_path", "default_user")
+        
+        if not filename or not content:
+            return jsonify({"error": "filename and content are required"}), 400
+            
+        # Handle base64 content if needed
+        if isinstance(content, str):
+            try:
+                import base64
+                content = base64.b64decode(content)
+            except:
+                content = content.encode('utf-8')
+        
+        file_url = upload_file(filename, content, user_path)
+        
+        return jsonify({
+            "status": "success", 
+            "file_url": file_url,
+            "message": f"File {filename} uploaded successfully"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)from flask import Flask, request, jsonify
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'utils'))
+
+from gcs import upload_file
+
+app = Flask(__name__)
 from utils.gcs import upload_file, get_file_metadata
 from utils.logger import log_info, log_error, log_request, log_response, log_warning
 import base64
