@@ -49,20 +49,17 @@ export default function CloudVault() {
   };
 
   const simulateUpload = () => {
-    // Demo: create a small file payload and POST to server upload endpoint
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
-    const uploadUrl = `${apiBase}/upload`;
-
+    // Demo: create a small file payload and POST to upload function
     const demoFilename = `demo_upload_${Date.now()}.txt`;
     const content = `Demo file uploaded at ${new Date().toISOString()}`;
 
     setUploadProgress(5);
 
-    // Try multiple upload paths (some server files mount at /upload or /)
+    // Try multiple upload paths on the upload service
     fetchWithFallback(['/upload', '/'], {
       method: 'POST',
       body: JSON.stringify({ filename: demoFilename, content: btoa(content), encoding: 'base64' })
-    })
+    }, 'upload')
       .then(async (res) => {
         if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
         setUploadProgress(50);
@@ -91,7 +88,7 @@ export default function CloudVault() {
       const res = await fetchWithFallback(['/files/list', '/list'], {
         method: 'POST',
         body: JSON.stringify({ user_path: userPath })
-      });
+      }, 'files');
 
       const data = await res.json();
       if (data && data.files) {
@@ -112,8 +109,28 @@ export default function CloudVault() {
   };
 
   // Helper that tries multiple possible endpoint prefixes to maximize chance of connecting
-  const fetchWithFallback = async (paths, options = {}) => {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const getApiBase = (kind) => {
+    // Prefer Next.js public env vars, fallback to older conventions, then sensible defaults
+    if (kind === 'upload') {
+      return process.env.NEXT_PUBLIC_UPLOAD_API_BASE
+        || process.env.REACT_APP_UPLOAD_API_BASE
+        || process.env.VITE_UPLOAD_API_BASE
+        || 'http://localhost:8080';
+    }
+    if (kind === 'files') {
+      return process.env.NEXT_PUBLIC_FILES_API_BASE
+        || process.env.REACT_APP_FILES_API_BASE
+        || process.env.VITE_FILES_API_BASE
+        || 'http://localhost:8083';
+    }
+    return process.env.NEXT_PUBLIC_API_BASE
+      || process.env.REACT_APP_API_BASE
+      || process.env.VITE_API_BASE
+      || 'http://localhost:8080';
+  };
+
+  const fetchWithFallback = async (paths, options = {}, kind = 'default') => {
+    const apiBase = getApiBase(kind);
     let lastErr = null;
     for (const p of paths) {
       const url = `${apiBase}${p}`;
