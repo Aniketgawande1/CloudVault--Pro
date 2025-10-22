@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
+'use client'
+import React, { useState, useEffect } from 'react';
 import { Cloud, Upload, FileText, User, Settings, LogOut, Menu, X, FolderOpen, Clock, Shield, Zap } from 'lucide-react';
 
 export default function CloudVault() {
   const [currentPage, setCurrentPage] = useState('auth');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [token, setToken] = useState('');
+  // Load token on client after mount to avoid SSR window reference
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = window.localStorage.getItem('cloudvault_token');
+        if (stored) setToken(stored);
+      }
+    } catch {}
+  }, []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -16,6 +27,11 @@ export default function CloudVault() {
 
   const handleLogin = () => {
     if (email && password) {
+      // Use provided token if present; otherwise fall back to demo API key for local dev
+      const provided = (token || '').trim();
+      const effectiveToken = provided || 'cloudvault_test_api_key_12345';
+      setToken(effectiveToken);
+      try { window.localStorage.setItem('cloudvault_token', effectiveToken); } catch {}
       setIsAuthenticated(true);
       setCurrentPage('dashboard');
     } else {
@@ -28,34 +44,112 @@ export default function CloudVault() {
     setCurrentPage('auth');
     setEmail('');
     setPassword('');
+    setToken('');
+    window.localStorage.removeItem('cloudvault_token');
   };
 
   const simulateUpload = () => {
-    setUploadProgress(0);
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => setUploadProgress(0), 1000);
-          return 100;
-        }
-        return prev + 10;
+    // Demo: create a small file payload and POST to server upload endpoint
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+    const uploadUrl = `${apiBase}/upload`;
+
+    const demoFilename = `demo_upload_${Date.now()}.txt`;
+    const content = `Demo file uploaded at ${new Date().toISOString()}`;
+
+    setUploadProgress(5);
+
+    // Try multiple upload paths (some server files mount at /upload or /)
+    fetchWithFallback(['/upload', '/'], {
+      method: 'POST',
+      body: JSON.stringify({ filename: demoFilename, content: btoa(content), encoding: 'base64' })
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+        setUploadProgress(50);
+        const data = await res.json();
+        // Update uploads list with returned file info when available
+        const newFile = {
+          id: Date.now(),
+          name: demoFilename,
+          size: `${(content.length / 1024).toFixed(2)} KB`,
+          date: new Date().toISOString().split('T')[0],
+          status: 'completed',
+        };
+        setUploads(prev => [newFile, ...prev]);
+        setUploadProgress(100);
+        setTimeout(() => setUploadProgress(0), 1200);
+      })
+      .catch((err) => {
+        console.error(err);
+        setUploadProgress(0);
+        alert('Upload failed. See console for details.');
       });
-    }, 200);
+  };
+
+  const fetchFilesForUser = async (userPath = 'test_user') => {
+    try {
+      const res = await fetchWithFallback(['/files/list', '/list'], {
+        method: 'POST',
+        body: JSON.stringify({ user_path: userPath })
+      });
+
+      const data = await res.json();
+      if (data && data.files) {
+        // Map server file objects to client uploads shape
+        const serverFiles = data.files.map((f, idx) => ({
+          id: idx + 1 + Math.floor(Math.random() * 1000),
+          name: f.name || f.filename || f.path || `file_${idx}`,
+          size: f.size ? `${Math.round(f.size / 1024)} KB` : '—',
+          date: f.created ? f.created.split('T')[0] : '—',
+          status: 'completed'
+        }));
+        setUploads(serverFiles);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Failed to fetch files from server. See console for details.');
+    }
+  };
+
+  // Helper that tries multiple possible endpoint prefixes to maximize chance of connecting
+  const fetchWithFallback = async (paths, options = {}) => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+    let lastErr = null;
+    for (const p of paths) {
+      const url = `${apiBase}${p}`;
+      try {
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          }
+        });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return res;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`Attempt to ${url} failed:`, e.message);
+        continue;
+      }
+    }
+    throw lastErr || new Error('All endpoints failed');
   };
 
   // Auth Page
   const AuthPage = () => (
     <div className="min-h-screen bg-white flex items-center justify-center p-4 overflow-hidden relative">
       {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-black opacity-5 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-black opacity-5 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-black opacity-3 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Header */}
-        <div className="text-center mb-8 animate-fadeIn">
+        <div className="text-center mb-8" style={{animation: 'fadeIn 0.6s ease-out'}}>
           <div className="inline-flex items-center justify-center w-20 h-20 bg-black rounded-2xl mb-4 shadow-2xl transform hover:scale-110 transition-transform duration-300">
             <Cloud className="w-10 h-10 text-white" />
           </div>
@@ -64,37 +158,44 @@ export default function CloudVault() {
         </div>
 
         {/* Login Form */}
-        <div className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-3xl p-8 shadow-2xl transform hover:scale-105 transition-all duration-300">
-          <div className="space-y-6">
-            <div>
+        <div className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all duration-300"
+             style={{animation: 'fadeIn 0.8s ease-out'}}>
+          <form className="space-y-6" onSubmit={(e)=>{ e.preventDefault(); handleLogin(); }} noValidate>
+            <div style={{animation: 'fadeIn 1s ease-out'}}>
               <label className="block text-black text-sm font-semibold mb-2">Email Address</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-white border-2 border-gray-300 rounded-xl px-4 py-3 text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black transition-all duration-300"
+                className="w-full bg-white border-2 border-gray-300 rounded-xl px-4 py-3 text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black transition-all duration-300 transform hover:scale-102"
                 placeholder="your.email@example.com"
+                autoComplete="email"
               />
             </div>
-            <div>
+            
+            {/* Token field removed intentionally for cleaner UI; token is handled internally for dev */}
+
+            <div style={{animation: 'fadeIn 1.2s ease-out'}}>
               <label className="block text-black text-sm font-semibold mb-2">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-white border-2 border-gray-300 rounded-xl px-4 py-3 text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black transition-all duration-300"
+                className="w-full bg-white border-2 border-gray-300 rounded-xl px-4 py-3 text-black focus:outline-none focus:border-black focus:ring-2 focus:ring-black transition-all duration-300 transform hover:scale-102"
                 placeholder="••••••••"
+                autoComplete="current-password"
               />
             </div>
             <button
-              onClick={handleLogin}
-              className="w-full bg-black text-white font-bold py-3 rounded-xl hover:bg-gray-800 transform hover:scale-105 transition-all duration-300 shadow-lg"
+              type="submit"
+              className="w-full bg-black text-white font-bold py-3 rounded-xl hover:bg-gray-800 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+              style={{animation: 'fadeIn 1.4s ease-out'}}
             >
               Sign In to Cloud Vault
             </button>
-          </div>
+          </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center" style={{animation: 'fadeIn 1.6s ease-out'}}>
             <button className="text-gray-600 hover:text-black text-sm transition-colors duration-300">
               Forgot your password?
             </button>
@@ -104,13 +205,30 @@ export default function CloudVault() {
         {/* Features */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">
           {[
-            { icon: Shield, text: 'Secure' },
-            { icon: Zap, text: 'Fast' },
-            { icon: Cloud, text: 'Reliable' }
+            { icon: Shield, text: 'Secure', delay: '1.8s' },
+            { icon: Zap, text: 'Fast', delay: '2s' },
+            { icon: Cloud, text: 'Reliable', delay: '2.2s' }
           ].map((feature, idx) => (
-            <div key={idx} className="bg-white border-2 border-gray-200 rounded-2xl p-4 transform hover:scale-110 transition-all duration-300 shadow-lg">
+            <div key={idx} 
+                 className="bg-white border-2 border-gray-200 rounded-2xl p-4 transform hover:scale-110 transition-all duration-300 shadow-lg hover:shadow-xl"
+                 style={{animation: `fadeIn 0.5s ease-out ${feature.delay} both`}}>
               <feature.icon className="w-6 h-6 text-black mx-auto mb-2" />
               <p className="text-black text-sm font-semibold">{feature.text}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Additional Info Cards */}
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          {[
+            { label: 'Total Users', value: '10K+', delay: '2.4s' },
+            { label: 'Files Stored', value: '1M+', delay: '2.6s' }
+          ].map((stat, idx) => (
+            <div key={idx} 
+                 className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-xl p-4 text-center transform hover:scale-105 transition-all duration-300 shadow-lg"
+                 style={{animation: `fadeIn 0.5s ease-out ${stat.delay} both`}}>
+              <p className="text-2xl font-bold text-black mb-1">{stat.value}</p>
+              <p className="text-gray-600 text-xs font-semibold">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -167,8 +285,8 @@ export default function CloudVault() {
             <h2 className="text-2xl font-bold text-black">Quick Upload Center</h2>
             <Upload className="w-6 h-6 text-gray-600" />
           </div>
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-black hover:bg-gray-50 transition-all duration-300 cursor-pointer"
-               onClick={simulateUpload}>
+    <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-black hover:bg-gray-50 transition-all duration-300 cursor-pointer"
+      onClick={simulateUpload}>
             <div className="w-20 h-20 bg-black bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
               <Upload className="w-10 h-10 text-black" />
             </div>
@@ -182,6 +300,14 @@ export default function CloudVault() {
                 <Zap className="w-4 h-4 mr-1" /> Fast Upload
               </span>
             </div>
+          </div>
+          <div className="mt-4 flex space-x-3">
+            <button onClick={() => fetchFilesForUser('test_user')} className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
+              Refresh Files
+            </button>
+            <button onClick={() => fetchFilesForUser('test_user')} className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800">
+              Fetch Server Files
+            </button>
           </div>
           {uploadProgress > 0 && (
             <div className="mt-6 bg-white border-2 border-gray-200 rounded-xl p-4">
@@ -500,8 +626,17 @@ export default function CloudVault() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto bg-gray-50">
-        <div className="p-8">
+      <div className="flex-1 overflow-auto bg-gradient-to-br from-gray-50 via-white to-gray-100 relative">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-96 h-96 bg-gradient-to-br from-black to-gray-800 opacity-5 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-10 w-[500px] h-[500px] bg-gradient-to-br from-gray-900 to-black opacity-4 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+          <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-gradient-to-br from-black to-gray-700 opacity-3 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+          <div className="absolute top-1/4 right-1/4 w-72 h-72 bg-gradient-to-br from-gray-800 to-black opacity-4 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1.5s'}}></div>
+          <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-gradient-to-br from-black to-gray-900 opacity-3 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2.5s'}}></div>
+        </div>
+        
+        <div className="p-8 relative z-10">
           {currentPage === 'dashboard' && <DashboardPage />}
           {currentPage === 'profile' && <ProfilePage />}
           {currentPage === 'settings' && (
