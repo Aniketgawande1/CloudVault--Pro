@@ -120,13 +120,43 @@ function App() {
     setCurrentPage(page);
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setAuthMode('login');
+    setCurrentPage('dashboard');
+    setUploadProgress(0);
+    setUploads([]);
+    console.log('User logged out');
+  };
+
   const toggleStar = (fileId) => {
     setFiles(files.map(f => f.id === fileId ? { ...f, starred: !f.starred } : f));
   };
 
   const getFileIcon = (type) => {
-    if (type === 'folder') return <Folder className="w-8 h-8" />;
-    return <File className="w-8 h-8" />;
+    switch (type) {
+      case 'folder':
+        return <Folder className="w-8 h-8 text-yellow-500" />;
+      case 'pdf':
+        return <FileText className="w-8 h-8 text-red-500" />;
+      case 'doc':
+      case 'docx':
+        return <FileText className="w-8 h-8 text-blue-500" />;
+      case 'xls':
+      case 'xlsx':
+      case 'excel':
+        return <FileText className="w-8 h-8 text-green-600" />;
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return <FileText className="w-8 h-8 text-purple-500" />;
+      case 'ppt':
+      case 'pptx':
+        return <FileText className="w-8 h-8 text-orange-500" />;
+      default:
+        return <File className="w-8 h-8 text-gray-500" />;
+    }
   };
 
   // Auth Page
@@ -754,7 +784,10 @@ function App() {
             <User className="w-5 h-5" />
             Profile
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 transition-all text-red-600 font-medium transform hover:scale-105">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 transition-all text-red-600 font-medium transform hover:scale-105"
+          >
             <LogOut className="w-5 h-5" />
             Logout
           </button>

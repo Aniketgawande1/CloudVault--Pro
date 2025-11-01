@@ -1,0 +1,31 @@
+{
+  "family": "cloudvault-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "cloudvault-server",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/cloudvault-server:latest",
+      "portMappings": [{"containerPort":5000,"protocol":"tcp"}],
+      "essential": true,
+      "environment": [
+        {"name":"S3_BUCKET","value":"<S3_BUCKET_NAME>"},
+        {"name":"AWS_REGION","value":"<REGION>"},
+        {"name":"DEV_API_KEY","value":"cloudvault_test_api_key_12345"},
+        {"name":"FLASK_ENV","value":"production"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloudvault",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ],
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/CloudVaultTaskRole"
+}
