@@ -15,17 +15,19 @@ try:
     from .utils.logger import log_info, log_error
     from .utils.auth import is_authenticated, get_user_id
     from .utils.storage_factory import storage
+    from .services.auth_service import signup_user, login_user, token_required, get_user_storage, update_user_storage
 except ImportError:
     # Fall back to absolute imports (when run directly)
     from utils.logger import log_info, log_error
     from utils.auth import is_authenticated, get_user_id
     from utils.storage_factory import storage
+    from services.auth_service import signup_user, login_user, token_required, get_user_storage, update_user_storage
 
 def create_app():
     app = Flask(__name__)
     
     # Enable CORS for all routes, allowing requests from localhost:3000
-    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000"]}},
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]}},
          supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-User-ID"],
          methods=["GET", "POST", "OPTIONS"])
@@ -34,11 +36,82 @@ def create_app():
     def health():
         return jsonify({"status": "ok"}), 200
 
+    # Authentication routes
+    @app.route("/auth/signup", methods=["POST"])
+    def signup():
+        data = request.get_json(silent=True) or {}
+        email = data.get("email")
+        password = data.get("password")
+        full_name = data.get("full_name")
+        
+        if not email or not password or not full_name:
+            return jsonify({"status": "error", "message": "Email, password, and full name are required"}), 400
+        
+        user_data, error = signup_user(email, password, full_name)
+        if error:
+            return jsonify({"status": "error", "message": error}), 400
+        
+        # Extract token from user_data
+        token = user_data.pop('token')
+        storage_info = get_user_storage(email)
+        
+        log_info("user signed up", email=email)
+        return jsonify({
+            "status": "success", 
+            "token": token,
+            "user": user_data,
+            "storage": storage_info
+        }), 201
+
+    @app.route("/auth/login", methods=["POST"])
+    def login():
+        data = request.get_json(silent=True) or {}
+        email = data.get("email")
+        password = data.get("password")
+        
+        print(f"[DEBUG] Login attempt - email: {email}")  # Debug
+        
+        if not email or not password:
+            print("[DEBUG] Missing email or password")  # Debug
+            return jsonify({"status": "error", "message": "Email and password are required"}), 400
+        
+        user_data, error = login_user(email, password)
+        if error:
+            print(f"[DEBUG] Login failed - error: {error}")  # Debug
+            return jsonify({"status": "error", "message": error}), 401
+        
+        # Extract token from user_data
+        token = user_data.pop('token')
+        storage_info = get_user_storage(email)
+        
+        print(f"[DEBUG] Login successful - email: {email}")  # Debug
+        log_info("user logged in", email=email)
+        return jsonify({
+            "status": "success",
+            "token": token,
+            "user": user_data,
+            "storage": storage_info
+        }), 200
+
+    @app.route("/auth/me", methods=["GET"])
+    @token_required
+    def get_current_user():
+        email = request.current_user.get('email')
+        storage_info = get_user_storage(email)
+        return jsonify({
+            "status": "success",
+            "user": {
+                "email": email,
+                "user_id": request.current_user.get('user_id'),
+                "storage": storage_info
+            }
+        }), 200
+
     @app.route("/upload", methods=["POST"])
+    @token_required
     def upload():
-        if not is_authenticated(request):
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
-        user_id = get_user_id(request)
+        email = request.current_user.get('email')
+        user_id = request.current_user.get('user_id')
         data = request.get_json(silent=True) or {}
         filename = data.get("filename")
         content = data.get("content")
@@ -56,29 +129,63 @@ def create_app():
         else:
             content_bytes = content.encode("utf-8")
 
+        # Check storage limit
+        file_size = len(content_bytes)
+        storage_info = get_user_storage(email)
+        if storage_info and (storage_info['used'] + file_size > storage_info['limit']):
+            return jsonify({
+                "status": "error",
+                "message": "Storage limit exceeded",
+                "storage": storage_info
+            }), 400
+
         # sanitize filename (simple)
         filename = filename.replace("..", "").lstrip("/")
 
         path = f"{user_id}/{filename}"
         meta = storage.save_file(path, content_bytes)
-        log_info("file uploaded", user=user_id, path=path)
-        return jsonify({"status":"success", "file": meta}), 200
+        
+        # Update storage used
+        update_user_storage(email, file_size)
+        updated_storage = get_user_storage(email)
+        
+        log_info("file uploaded", user=user_id, path=path, size=file_size)
+        return jsonify({
+            "status":"success",
+            "file": meta,
+            "storage": updated_storage
+        }), 200
 
     @app.route("/files/list", methods=["POST"])
     @app.route("/list", methods=["POST"])
+    @token_required
     def list_files():
-        if not is_authenticated(request):
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        # Get user info from request.current_user set by @token_required
+        email = request.current_user.get('email')
+        user_id = request.current_user.get('user_id')
+        
+        print(f"[DEBUG] list_files - email: {email}, user_id: {user_id}")  # Debug
+        
         data = request.get_json(silent=True) or {}
-        user_path = data.get("user_path") or get_user_id(request)
+        user_path = data.get("user_path") or user_id
+        
         files = storage.list_files(user_path)
-        return jsonify({"status":"success", "user_path": user_path, "files": files, "file_count": len(files)}), 200
+        storage_info = get_user_storage(email)
+        
+        print(f"[DEBUG] list_files - Found {len(files)} files, storage: {storage_info}")  # Debug
+        
+        return jsonify({
+            "status":"success", 
+            "user_path": user_path, 
+            "files": files, 
+            "file_count": len(files),
+            "storage": storage_info
+        }), 200
 
     @app.route("/files/download", methods=["POST"])
     @app.route("/download", methods=["POST"])
-    def download():
-        if not is_authenticated(request):
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    @token_required
+    def download(email):
         data = request.get_json(silent=True) or {}
         filename = data.get("filename")
         if not filename:
@@ -90,19 +197,17 @@ def create_app():
         return jsonify({"status":"success","filename": filename, "content": b64, "encoding": "base64", "size": len(content)}), 200
 
     @app.route("/backup", methods=["POST"])
-    def backup():
-        if not is_authenticated(request):
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
-        user_id = get_user_id(request)
+    @token_required
+    def backup(email):
+        user_id = get_user_storage(email)['user_id']
         data = request.get_json(silent=True) or {}
         backup_name = data.get("backup_name")
         manifest_meta = storage.create_backup_manifest(user_id, backup_name=backup_name)
         return jsonify({"status":"success","backup_name": manifest_meta.get("name"), "manifest": manifest_meta}), 200
 
     @app.route("/restore", methods=["POST"])
-    def restore():
-        if not is_authenticated(request):
-            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    @token_required
+    def restore(email):
         data = request.get_json(silent=True) or {}
         backup_name = data.get("backup_name")
         if not backup_name:
