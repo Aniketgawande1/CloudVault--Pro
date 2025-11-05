@@ -172,17 +172,23 @@ def create_app():
         content = data.get("content")
         encoding = data.get("encoding", "base64")
 
-        if not filename or not content:
-            return jsonify({"status": "error", "message": "filename and content required"}), 400
+        if not filename:
+            return jsonify({"status": "error", "message": "filename required"}), 400
+        
+        # Allow empty content for folder markers
+        if content is None:
+            content = ""
 
         # decode if base64
-        if encoding == "base64":
+        if encoding == "base64" and content:
             try:
                 content_bytes = base64.b64decode(content)
             except Exception as e:
                 return jsonify({"status": "error", "message": "invalid base64 content"}), 400
-        else:
+        elif content:
             content_bytes = content.encode("utf-8")
+        else:
+            content_bytes = b""
 
         # Check storage limit
         file_size = len(content_bytes)

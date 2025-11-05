@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import AuthPage from './components/auth/AuthPage';
 import Dashboard from './components/dashboard/Dashboard';
+import UploadModal from './components/modals/UploadModal';
+import FolderModal from './components/modals/FolderModal';
 import { api } from './api/api';
 
 // Mock data
@@ -268,6 +270,43 @@ function App() {
     setServerFiles(serverFiles.filter(f => f.filename !== filename));
   };
 
+  const handleUpload = async (filename, base64Content) => {
+    console.log('[UPLOAD] Uploading file:', filename);
+    try {
+      const result = await api.uploadFile(filename, base64Content, 'base64');
+      console.log('[UPLOAD] ✅ File uploaded successfully:', result);
+      
+      // Refresh file list
+      if (userData) {
+        await fetchFilesForUser(userData.user_id || userData.email);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[UPLOAD] ❌ Upload failed:', error);
+      throw error;
+    }
+  };
+
+  const handleCreateFolder = async (folderName) => {
+    console.log('[FOLDER] Creating folder:', folderName);
+    try {
+      // Create a .folder marker file (empty content is now allowed by backend)
+      const result = await api.uploadFile(`${folderName}/.folder`, '', 'base64');
+      console.log('[FOLDER] ✅ Folder created successfully:', result);
+      
+      // Refresh file list
+      if (userData) {
+        await fetchFilesForUser(userData.user_id || userData.email);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[FOLDER] ❌ Folder creation failed:', error);
+      throw error;
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <AuthPage
@@ -292,30 +331,44 @@ function App() {
   }
 
   return (
-    <Dashboard
-      currentPage={currentPage}
-      setCurrentPage={setCurrentPage}
-      userData={userData}
-      storageInfo={storageInfo}
-      uploads={uploads}
-      serverFiles={serverFiles}
-      backups={backups}
-      searchQuery={searchQuery}
-      setSearchQuery={setSearchQuery}
-      viewMode={viewMode}
-      setViewMode={setViewMode}
-      setShowUploadModal={setShowUploadModal}
-      setShowNewFolderModal={setShowNewFolderModal}
-      handleLogout={handleLogout}
-      selectedFile={selectedFile}
-      setSelectedFile={setSelectedFile}
-      handleDownloadFile={handleDownloadFile}
-      handleDeleteFile={handleDeleteFile}
-      files={files}
-      setFiles={setFiles}
-      recentFiles={recentFiles}
-      trashedFiles={trashedFiles}
-    />
+    <>
+      <Dashboard
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        userData={userData}
+        storageInfo={storageInfo}
+        uploads={uploads}
+        serverFiles={serverFiles}
+        backups={backups}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        setShowUploadModal={setShowUploadModal}
+        setShowNewFolderModal={setShowNewFolderModal}
+        handleLogout={handleLogout}
+        selectedFile={selectedFile}
+        setSelectedFile={setSelectedFile}
+        handleDownloadFile={handleDownloadFile}
+        handleDeleteFile={handleDeleteFile}
+        files={files}
+        setFiles={setFiles}
+        recentFiles={recentFiles}
+        trashedFiles={trashedFiles}
+      />
+      
+      <UploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUpload={handleUpload}
+      />
+      
+      <FolderModal
+        isOpen={showNewFolderModal}
+        onClose={() => setShowNewFolderModal(false)}
+        onCreateFolder={handleCreateFolder}
+      />
+    </>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react';
-import { Search, Grid, List, Plus, FolderPlus } from 'lucide-react';
+import { Search, Grid, List, Plus, FolderPlus, Download, Trash2 } from 'lucide-react';
 
 const FilesView = ({ 
   searchQuery, 
@@ -10,7 +10,9 @@ const FilesView = ({
   setViewMode,
   setShowUploadModal,
   setShowNewFolderModal,
-  serverFiles
+  serverFiles,
+  handleDownloadFile,
+  handleDeleteFile
 }) => {
   return (
     <div className="p-8">
@@ -87,17 +89,34 @@ const FilesView = ({
             {serverFiles.map((file, idx) => (
               <div 
                 key={idx} 
-                className="border-2 border-gray-200 rounded-xl p-4 hover:border-indigo-600 hover:shadow-lg transition-all cursor-pointer"
+                className="border-2 border-gray-200 rounded-xl p-4 hover:border-black hover:shadow-lg transition-all group"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                    <span className="text-indigo-600 font-bold">📄</span>
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold">📄</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{file.filename || file.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-semibold text-sm truncate mb-1">{file.filename || file.name}</p>
+                    <p className="text-xs text-gray-500 mb-3">
                       {file.size ? `${(file.size / 1024).toFixed(2)} KB` : 'N/A'}
                     </p>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleDownloadFile?.(file.filename || file.name)}
+                        className="flex-1 px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-all text-xs flex items-center justify-center gap-1"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Download</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFile?.(file.filename || file.name)}
+                        className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all text-xs flex items-center justify-center"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
