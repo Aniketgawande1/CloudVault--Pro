@@ -1,3 +1,5 @@
+"use client"
+
 import React, { useState } from 'react';
 import { Home, Star, Clock, Share2, Trash2, Folder, Cloud, LogOut, User, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 

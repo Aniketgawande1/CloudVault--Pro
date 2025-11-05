@@ -1,3 +1,5 @@
+"use client"
+
 import React, { useState, useEffect } from 'react';
 import AuthPage from './components/auth/AuthPage';
 import Dashboard from './components/dashboard/Dashboard';
@@ -51,26 +53,50 @@ function App() {
   const [serverFiles, setServerFiles] = useState([]);
   const [backups, setBackups] = useState([{ id: 1 }, { id: 2 }, { id: 3 }]);
 
-  // Check for existing session on mount
+  // Check for existing session on mount - validate token with server
   useEffect(() => {
-    console.log('[AUTH CHECK] 🔍 Checking for existing session...');
-    const savedToken = localStorage.getItem('authToken');
-    const savedUserData = localStorage.getItem('userData');
-    
-    if (savedToken && savedUserData) {
+    console.log('[AUTH CHECK] 🔍 Checking for existing session (validating token)...');
+    const init = async () => {
+      if (typeof window === 'undefined') return;
+      const savedToken = localStorage.getItem('authToken');
+      const savedUserData = localStorage.getItem('userData');
+
+      if (!savedToken) {
+        console.log('[AUTH CHECK] ℹ️  No saved token found');
+        return;
+      }
+
       try {
-        const parsedUserData = JSON.parse(savedUserData);
-        console.log('[AUTH CHECK] ✅ Valid session found for:', parsedUserData.email);
-        setUserData(parsedUserData);
-        setIsAuthenticated(true);
-      } catch (error) {
-        console.error('[AUTH CHECK] ❌ Failed to parse saved user data:', error);
+        // Validate token with server (/auth/me)
+        const me = await api.getCurrentUser();
+        console.log('[AUTH CHECK] server /auth/me response:', me);
+
+        if (me && (me.user || me.status === 'success')) {
+          // prefer server-provided user object
+          const user = me.user || (me.data && me.data.user) || (savedUserData ? JSON.parse(savedUserData) : null);
+          if (user) {
+            setUserData(user);
+            if (me.storage) setStorageInfo(me.storage);
+            // ensure localStorage has up-to-date user data
+            try { localStorage.setItem('userData', JSON.stringify(user)); } catch(e) {}
+            setIsAuthenticated(true);
+            console.log('[AUTH CHECK] ✅ Token validated, logged in as', user.email || user.user_id);
+            return;
+          }
+        }
+
+        // If we reach here token is not valid or server did not return user
+        console.warn('[AUTH CHECK] ⚠️ Token invalid or /auth/me did not return user - clearing session');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+      } catch (err) {
+        console.error('[AUTH CHECK] ❌ Token validation failed:', err);
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
       }
-    } else {
-      console.log('[AUTH CHECK] ℹ️  No saved session found');
-    }
+    };
+
+    init();
   }, []);
 
   // Fetch files when authenticated

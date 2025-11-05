@@ -1,3 +1,5 @@
+"use client"
+
 import React from 'react';
 import AuthBranding from './AuthBranding';
 import AuthForm from './AuthForm';

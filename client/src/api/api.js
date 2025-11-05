@@ -1,3 +1,5 @@
+"use client"
+
 import API_BASE_URL, { API_ENDPOINTS } from './config';
 
 // Helper function to make API calls

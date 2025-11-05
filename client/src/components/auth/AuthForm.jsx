@@ -1,4 +1,6 @@
-import React from 'react';
+"use client"
+
+import React, { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 const AuthForm = ({
@@ -19,6 +21,17 @@ const AuthForm = ({
   isAuthenticated,
   userData
 }) => {
+  const [hasToken, setHasToken] = useState(false);
+
+  useEffect(() => {
+    // read localStorage only on the client after mount to avoid SSR/client mismatch
+    try {
+      setHasToken(Boolean(window?.localStorage?.getItem && localStorage.getItem('authToken')));
+    } catch (e) {
+      setHasToken(false);
+    }
+  }, []);
+
   const onSubmit = (e) => {
     e.preventDefault();
     if (authMode === 'login') {
@@ -183,17 +196,6 @@ const AuthForm = ({
               {authMode === 'login' ? 'Sign Up' : 'Sign In'}
             </button>
           </p>
-
-          {/* Debug Info - Only in Development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg text-xs">
-              <div className="font-mono text-gray-600">
-                <div>Auth: {isAuthenticated ? '✅ Yes' : '❌ No'}</div>
-                <div>Token: {typeof window !== 'undefined' && localStorage.getItem('authToken') ? '✅ Exists' : '❌ Missing'}</div>
-                <div>User: {userData ? `✅ ${userData.email}` : '❌ Not set'}</div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

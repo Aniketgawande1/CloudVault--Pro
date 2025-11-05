@@ -15,13 +15,19 @@ try:
     from .utils.logger import log_info, log_error
     from .utils.auth import is_authenticated, get_user_id
     from .utils.storage_factory import storage
-    from .services.auth_service import signup_user, login_user, token_required, get_user_storage, update_user_storage
+    from .services.cognito_auth_service import (
+        signup_user, login_user, refresh_user_token, 
+        token_required, get_user_storage, update_user_storage, get_user_info
+    )
 except ImportError:
     # Fall back to absolute imports (when run directly)
     from utils.logger import log_info, log_error
     from utils.auth import is_authenticated, get_user_id
     from utils.storage_factory import storage
-    from services.auth_service import signup_user, login_user, token_required, get_user_storage, update_user_storage
+    from services.cognito_auth_service import (
+        signup_user, login_user, refresh_user_token,
+        token_required, get_user_storage, update_user_storage, get_user_info
+    )
 
 def create_app():
     app = Flask(__name__)
@@ -51,14 +57,23 @@ def create_app():
         if error:
             return jsonify({"status": "error", "message": error}), 400
         
-        # Extract token from user_data
-        token = user_data.pop('token')
-        storage_info = get_user_storage(email)
+        # Extract tokens from user_data
+        id_token = user_data.pop('id_token')
+        access_token = user_data.pop('access_token')
+        refresh_token = user_data.pop('refresh_token')
+        expires_in = user_data.pop('expires_in', 3600)
+        
+        user_id = user_data['user_id']
+        storage_info = get_user_storage(user_id)
         
         log_info("user signed up", email=email)
         return jsonify({
-            "status": "success", 
-            "token": token,
+            "status": "success",
+            "token": id_token,  # For compatibility with existing client
+            "id_token": id_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
             "user": user_data,
             "storage": storage_info
         }), 201
@@ -69,26 +84,35 @@ def create_app():
         email = data.get("email")
         password = data.get("password")
         
-        print(f"[DEBUG] Login attempt - email: {email}")  # Debug
+        print(f"[DEBUG] Login attempt - email: {email}")
         
         if not email or not password:
-            print("[DEBUG] Missing email or password")  # Debug
+            print("[DEBUG] Missing email or password")
             return jsonify({"status": "error", "message": "Email and password are required"}), 400
         
         user_data, error = login_user(email, password)
         if error:
-            print(f"[DEBUG] Login failed - error: {error}")  # Debug
+            print(f"[DEBUG] Login failed - error: {error}")
             return jsonify({"status": "error", "message": error}), 401
         
-        # Extract token from user_data
-        token = user_data.pop('token')
-        storage_info = get_user_storage(email)
+        # Extract tokens from user_data
+        id_token = user_data.pop('id_token')
+        access_token = user_data.pop('access_token')
+        refresh_token = user_data.pop('refresh_token')
+        expires_in = user_data.pop('expires_in', 3600)
         
-        print(f"[DEBUG] Login successful - email: {email}")  # Debug
+        user_id = user_data['user_id']
+        storage_info = get_user_storage(user_id)
+        
+        print(f"[DEBUG] Login successful - email: {email}")
         log_info("user logged in", email=email)
         return jsonify({
             "status": "success",
-            "token": token,
+            "token": id_token,  # For compatibility with existing client
+            "id_token": id_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": expires_in,
             "user": user_data,
             "storage": storage_info
         }), 200
@@ -96,15 +120,46 @@ def create_app():
     @app.route("/auth/me", methods=["GET"])
     @token_required
     def get_current_user():
+        user_id = request.current_user.get('user_id')
         email = request.current_user.get('email')
-        storage_info = get_user_storage(email)
+        
+        # Get user info from Cognito
+        user_info = get_user_info(user_id)
+        if not user_info:
+            return jsonify({
+                "status": "error",
+                "message": "User not found"
+            }), 401
+        
+        storage_info = get_user_storage(user_id)
         return jsonify({
             "status": "success",
             "user": {
                 "email": email,
-                "user_id": request.current_user.get('user_id'),
+                "user_id": user_id,
+                "full_name": user_info.get('full_name', ''),
                 "storage": storage_info
             }
+        }), 200
+    
+    @app.route("/auth/refresh", methods=["POST"])
+    def refresh_token_endpoint():
+        data = request.get_json(silent=True) or {}
+        refresh_token_value = data.get("refresh_token")
+        
+        if not refresh_token_value:
+            return jsonify({"status": "error", "message": "Refresh token is required"}), 400
+        
+        result, error = refresh_user_token(refresh_token_value)
+        if error:
+            return jsonify({"status": "error", "message": error}), 401
+        
+        return jsonify({
+            "status": "success",
+            "token": result['id_token'],
+            "id_token": result['id_token'],
+            "access_token": result['access_token'],
+            "expires_in": result['expires_in']
         }), 200
 
     @app.route("/upload", methods=["POST"])

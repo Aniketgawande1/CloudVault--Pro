@@ -1,3 +1,5 @@
+"use client"
+
 import React from 'react';
 import DashboardView from './views/DashboardView';
 import FilesView from './views/FilesView';

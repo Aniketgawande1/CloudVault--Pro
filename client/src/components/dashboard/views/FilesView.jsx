@@ -1,3 +1,5 @@
+"use client"
+
 import React from 'react';
 import { Search, Grid, List, Plus, FolderPlus } from 'lucide-react';
 
