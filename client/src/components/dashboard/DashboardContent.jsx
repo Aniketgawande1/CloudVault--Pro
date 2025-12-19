@@ -25,6 +25,9 @@ const DashboardContent = ({
   setSelectedFile,
   handleDownloadFile,
   handleDeleteFile,
+  handleViewFile,
+  handleStarFile,
+  handleShareFile,
   files,
   setFiles,
   recentFiles,
@@ -40,6 +43,9 @@ const DashboardContent = ({
             uploads={uploads}
             serverFiles={serverFiles}
             backups={backups}
+            handleViewFile={handleViewFile}
+            handleStarFile={handleStarFile}
+            handleShareFile={handleShareFile}
           />
         );
       case 'files':
@@ -57,11 +63,23 @@ const DashboardContent = ({
             setSelectedFile={setSelectedFile}
             handleDownloadFile={handleDownloadFile}
             handleDeleteFile={handleDeleteFile}
+            handleViewFile={handleViewFile}
+            handleStarFile={handleStarFile}
+            handleShareFile={handleShareFile}
             serverFiles={serverFiles}
           />
         );
       case 'starred':
-        return <StarredView files={files.filter(f => f.starred)} />;
+        return (
+          <StarredView 
+            files={serverFiles.filter(f => f.starred)}
+            handleViewFile={handleViewFile}
+            handleDownloadFile={handleDownloadFile}
+            handleDeleteFile={handleDeleteFile}
+            handleStarFile={handleStarFile}
+            handleShareFile={handleShareFile}
+          />
+        );
       case 'recent':
         return <RecentView files={recentFiles} />;
       case 'shared':

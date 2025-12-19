@@ -5,6 +5,8 @@ import AuthPage from './components/auth/AuthPage';
 import Dashboard from './components/dashboard/Dashboard';
 import UploadModal from './components/modals/UploadModal';
 import FolderModal from './components/modals/FolderModal';
+import FileViewerModal from './components/modals/FileViewerModal';
+import ShareModal from './components/modals/ShareModal';
 import { api } from './api/api';
 
 // Mock data
@@ -47,6 +49,11 @@ function App() {
   const [files, setFiles] = useState(mockFiles);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showFileViewer, setShowFileViewer] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [viewingFile, setViewingFile] = useState(null);
+  const [sharingFile, setSharingFile] = useState(null);
+  const [fileContent, setFileContent] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -99,6 +106,18 @@ function App() {
     };
 
     init();
+  }, []);
+
+  // Event listener for opening upload modal from dashboard
+  useEffect(() => {
+    const handleOpenUploadModal = () => {
+      setShowUploadModal(true);
+    };
+
+    document.addEventListener('openUploadModal', handleOpenUploadModal);
+    return () => {
+      document.removeEventListener('openUploadModal', handleOpenUploadModal);
+    };
   }, []);
 
   // Fetch files when authenticated
@@ -264,10 +283,56 @@ function App() {
     }
   };
 
+  const handleViewFile = async (file) => {
+    console.log('[VIEW] Opening file:', file.filename || file.name);
+    try {
+      setViewingFile(file);
+      setFileContent(null);
+      setShowFileViewer(true);
+      
+      const result = await api.downloadFile(file.filename || file.name);
+      console.log('[VIEW] ✅ File content loaded');
+      setFileContent(result.content);
+    } catch (error) {
+      console.error('[VIEW] ❌ Error loading file:', error);
+      setShowFileViewer(false);
+      setViewingFile(null);
+    }
+  };
+
+  const handleStarFile = (filename) => {
+    console.log('[STAR] Toggling star for:', filename);
+    setServerFiles(serverFiles.map(file => {
+      if ((file.filename || file.name) === filename) {
+        return { ...file, starred: !file.starred };
+      }
+      return file;
+    }));
+  };
+
+  const handleShareFile = async (file) => {
+    console.log('[SHARE] Sharing file:', file.filename || file.name);
+    setSharingFile(file);
+    setShowShareModal(true);
+  };
+
+  const copyToClipboard = (text) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Link copied to clipboard!');
+      }).catch(err => {
+        console.error('[CLIPBOARD] ❌ Error:', err);
+        alert('Failed to copy to clipboard');
+      });
+    }
+  };
+
   const handleDeleteFile = async (filename) => {
     // Placeholder for delete functionality
     console.log('[DELETE] Deleting file:', filename);
-    setServerFiles(serverFiles.filter(f => f.filename !== filename));
+    if (confirm(`Are you sure you want to delete ${filename}?`)) {
+      setServerFiles(serverFiles.filter(f => f.filename !== filename));
+    }
   };
 
   const handleUpload = async (filename, base64Content) => {
@@ -351,6 +416,9 @@ function App() {
         setSelectedFile={setSelectedFile}
         handleDownloadFile={handleDownloadFile}
         handleDeleteFile={handleDeleteFile}
+        handleViewFile={handleViewFile}
+        handleStarFile={handleStarFile}
+        handleShareFile={handleShareFile}
         files={files}
         setFiles={setFiles}
         recentFiles={recentFiles}
@@ -367,6 +435,26 @@ function App() {
         isOpen={showNewFolderModal}
         onClose={() => setShowNewFolderModal(false)}
         onCreateFolder={handleCreateFolder}
+      />
+      
+      <FileViewerModal
+        isOpen={showFileViewer}
+        onClose={() => {
+          setShowFileViewer(false);
+          setViewingFile(null);
+          setFileContent(null);
+        }}
+        file={viewingFile}
+        fileContent={fileContent}
+      />
+      
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => {
+          setShowShareModal(false);
+          setSharingFile(null);
+        }}
+        file={sharingFile}
       />
     </>
   );

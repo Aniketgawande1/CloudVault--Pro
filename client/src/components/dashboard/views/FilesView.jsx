@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react';
-import { Search, Grid, List, Plus, FolderPlus, Download, Trash2 } from 'lucide-react';
+import { Search, Grid, List, Plus, FolderPlus, Download, Trash2, Eye, Star, Share2 } from 'lucide-react';
 
 const FilesView = ({ 
   searchQuery, 
@@ -12,7 +12,10 @@ const FilesView = ({
   setShowNewFolderModal,
   serverFiles,
   handleDownloadFile,
-  handleDeleteFile
+  handleDeleteFile,
+  handleViewFile,
+  handleStarFile,
+  handleShareFile
 }) => {
   return (
     <div className="p-8">
@@ -103,6 +106,37 @@ const FilesView = ({
                     
                     {/* Action Buttons */}
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStarFile?.(file.filename || file.name);
+                        }}
+                        className={`p-2 rounded-lg transition-all text-xs flex items-center justify-center ${
+                          file.starred 
+                            ? 'bg-yellow-500 text-white hover:bg-yellow-600' 
+                            : 'bg-gray-200 text-gray-600 hover:bg-yellow-100 hover:text-yellow-600'
+                        }`}
+                        title={file.starred ? 'Unstar' : 'Star'}
+                      >
+                        <Star className={`w-3 h-3 ${file.starred ? 'fill-current' : ''}`} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleShareFile?.(file);
+                        }}
+                        className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-xs flex items-center justify-center"
+                        title="Share"
+                      >
+                        <Share2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleViewFile?.(file)}
+                        className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-xs flex items-center justify-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>View</span>
+                      </button>
                       <button
                         onClick={() => handleDownloadFile?.(file.filename || file.name)}
                         className="flex-1 px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-all text-xs flex items-center justify-center gap-1"

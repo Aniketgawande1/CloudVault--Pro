@@ -32,8 +32,8 @@ except ImportError:
 def create_app():
     app = Flask(__name__)
     
-    # Enable CORS for all routes, allowing requests from localhost:3000
-    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"]}},
+    # Enable CORS for all routes, allowing requests from localhost:3000 and 3001
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"]}},
          supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-User-ID"],
          methods=["GET", "POST", "OPTIONS"])

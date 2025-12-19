@@ -23,6 +23,9 @@ const Dashboard = ({
   setSelectedFile,
   handleDownloadFile,
   handleDeleteFile,
+  handleViewFile,
+  handleStarFile,
+  handleShareFile,
   files,
   setFiles,
   recentFiles,
@@ -55,6 +58,9 @@ const Dashboard = ({
         setSelectedFile={setSelectedFile}
         handleDownloadFile={handleDownloadFile}
         handleDeleteFile={handleDeleteFile}
+        handleViewFile={handleViewFile}
+        handleStarFile={handleStarFile}
+        handleShareFile={handleShareFile}
         files={files}
         setFiles={setFiles}
         recentFiles={recentFiles}
